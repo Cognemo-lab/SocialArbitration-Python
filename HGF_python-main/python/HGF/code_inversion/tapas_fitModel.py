@@ -442,6 +442,8 @@ def negLogJoint(r, prc_fun, obs_fun, ptrans_prc, ptrans_obs) :
 	# Calculate the log-likelihood of observed responses given the perceptual trajectories,
 	# under the observation model
 	trialLogLls = obs_fun(r, infStates, ptrans_obs)
+	if isinstance(trialLogLls, (tuple, list)) :
+		trialLogLls = trialLogLls[0]
 	if trialLogLls.shape[1] > 1 :
 		sys.exit(1)
 	logLl = np.nansum(trialLogLls, axis = 0)[0]
