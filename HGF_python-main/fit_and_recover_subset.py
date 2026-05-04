@@ -19,6 +19,7 @@ from HGF.code_model_wagad.prc_model.hgf_binary3l_freekappa_reward_social import 
     hgf_binary3l_freekappa_reward_social,
 )
 from fit_raw_recovery_pipeline import OBS_ORDER, PRC_ORDER, _corr, _load_and_extract, _rmse
+from fit_recover_reliability_raw import _icc3_1
 
 PRC_PRIOR_ORDER = [
     'mu2r_0', 'sa2r_0', 'mu3r_0', 'sa3r_0', 'ka_r', 'om_r', 'th_r',
@@ -67,6 +68,16 @@ def _masked_corr(x: np.ndarray, y: np.ndarray, mask: np.ndarray) -> float:
 
 def _masked_rmse(x: np.ndarray, y: np.ndarray, mask: np.ndarray) -> float:
     return _rmse(x[mask], y[mask])
+
+
+def _metric_scale(parameter: str, x: np.ndarray, y: np.ndarray):
+    if parameter == 'ze':
+        mask = (x > 0) & (y > 0) & np.isfinite(x) & np.isfinite(y)
+        x = np.log(x[mask])
+        y = np.log(y[mask])
+        return x, y, 'log'
+    mask = np.isfinite(x) & np.isfinite(y)
+    return x[mask], y[mask], 'native'
 
 
 def _simulate(u: np.ndarray, prc_vec: np.ndarray, obs_vec: np.ndarray, seed: int):
@@ -221,14 +232,17 @@ def main():
     report_rows = []
     for (group, parameter), d in corr_df.groupby(['group', 'parameter']):
         is_fixed = bool(d['is_fixed'].iloc[0])
-        x = d['fitted_on_raw'].to_numpy(dtype=float)
-        y = d['recovered_from_sim'].to_numpy(dtype=float)
+        x_raw = d['fitted_on_raw'].to_numpy(dtype=float)
+        y_raw = d['recovered_from_sim'].to_numpy(dtype=float)
+        x, y, metric_scale = _metric_scale(parameter, x_raw, y_raw)
         report_rows.append({
             'group': group,
             'parameter': parameter,
             'is_fixed': is_fixed,
-            'n': int(len(d)),
+            'n': int(len(x)),
+            'metric_scale': metric_scale,
             'pearson_r': np.nan if is_fixed else _corr(x, y),
+            'icc3_1': np.nan if is_fixed else _icc3_1(np.column_stack([x, y])),
             'rmse': np.nan if is_fixed else _rmse(x, y),
             'mae': np.nan if is_fixed else float(np.mean(np.abs(y - x))),
             'mean_abs_error': np.nan if is_fixed else float(np.mean(np.abs(y - x))),

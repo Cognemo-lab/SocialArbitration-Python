@@ -79,6 +79,16 @@ def _icc3_1(two_col: np.ndarray) -> float:
     return float((ms_row - ms_err) / denom)
 
 
+def _metric_scale(parameter: str, x: np.ndarray, y: np.ndarray):
+    if parameter == 'ze':
+        mask = (x > 0) & (y > 0) & np.isfinite(x) & np.isfinite(y)
+        x = np.log(x[mask])
+        y = np.log(y[mask])
+        return x, y, 'log'
+    mask = np.isfinite(x) & np.isfinite(y)
+    return x[mask], y[mask], 'native'
+
+
 def _simulate(u: np.ndarray, prc_vec: np.ndarray, obs_vec: np.ndarray, seed: int):
     np.random.seed(seed)
     r = {'u': u, 'ign': []}
@@ -308,14 +318,17 @@ def main():
     report_rows = []
     for (group, parameter), d in corr_df.groupby(['group', 'parameter']):
         is_fixed = bool(d['is_fixed'].iloc[0])
-        x = d['fitted_on_raw'].to_numpy(dtype=float)
-        y = d['recovered_from_sim'].to_numpy(dtype=float)
+        x_raw = d['fitted_on_raw'].to_numpy(dtype=float)
+        y_raw = d['recovered_from_sim'].to_numpy(dtype=float)
+        x, y, metric_scale = _metric_scale(parameter, x_raw, y_raw)
         report_rows.append({
             'group': group,
             'parameter': parameter,
             'is_fixed': is_fixed,
-            'n': int(len(d)),
+            'n': int(len(x)),
+            'metric_scale': metric_scale,
             'pearson_r': np.nan if is_fixed else _corr(x, y),
+            'icc3_1': np.nan if is_fixed else _icc3_1(np.column_stack([x, y])),
             'rmse': np.nan if is_fixed else _rmse(x, y),
             'mae': np.nan if is_fixed else float(np.mean(np.abs(y - x))),
             'mean_abs_error': np.nan if is_fixed else float(np.mean(np.abs(y - x))),

@@ -18,6 +18,19 @@ BEHAVIOR_LABELS = {
     "lose_switch_rate": "Lose-switch",
 }
 
+PARAMETER_ORDER = ["ka_a", "ka_r", "m_a", "om_a", "sa3a_0", "sa3r_0", "th_a", "th_r"]
+
+PARAMETER_LABELS = {
+    "ka_a": "Kappa-Advice",
+    "ka_r": "Kappa-Reward",
+    "m_a": "Equilibrium-Advice",
+    "om_a": "Omega-Advice",
+    "sa3a_0": "Prior Uncertainty-Advice",
+    "sa3r_0": "Prior Uncertainty-Reward",
+    "th_a": "Theta-Advice",
+    "th_r": "Theta-Reward",
+}
+
 
 def fdr_stars(q: float) -> str:
     if pd.isna(q):
@@ -37,14 +50,20 @@ def main() -> None:
     assoc = pd.read_csv(IN_DIR / "construct_validity_parameter_behavior.csv")
     top = pd.read_csv(IN_DIR / "top_construct_validity_hits.csv")
 
-    pooled = assoc.loc[assoc["analysis_scope"] == "pooled_t1_t2"].copy()
+    pooled = assoc.loc[
+        (assoc["analysis_scope"] == "pooled_t1_t2")
+        & (assoc["parameter"].isin(PARAMETER_ORDER))
+    ].copy()
     pooled["behavior_label"] = pooled["behavior_metric"].map(BEHAVIOR_LABELS)
+    pooled["parameter_label"] = pooled["parameter"].map(PARAMETER_LABELS).fillna(pooled["parameter"])
 
-    heat = pooled.pivot(index="parameter", columns="behavior_label", values="pearson_r")
+    heat = pooled.pivot(index="parameter_label", columns="behavior_label", values="pearson_r")
+    desired_index = [PARAMETER_LABELS[p] for p in PARAMETER_ORDER if PARAMETER_LABELS[p] in heat.index]
+    heat = heat.reindex(desired_index)
     heat = heat.loc[heat.abs().max(axis=1).sort_values(ascending=False).index]
 
     qvals = pooled.pivot(
-        index="parameter",
+        index="parameter_label",
         columns="behavior_label",
         values="fdr_q_pearson_within_behavior_scope",
     ).reindex(index=heat.index, columns=heat.columns)
@@ -69,12 +88,16 @@ def main() -> None:
     fig.savefig(OUT_DIR / "figure_construct_validity_heatmap.png", dpi=220)
     plt.close(fig)
 
-    focus = top.loc[top["analysis_scope"] == "pooled_t1_t2"].copy()
+    focus = top.loc[
+        (top["analysis_scope"] == "pooled_t1_t2")
+        & (top["parameter"].isin(PARAMETER_ORDER))
+    ].copy()
     focus["behavior_label"] = focus["behavior_metric"].map(BEHAVIOR_LABELS)
+    focus["parameter_label"] = focus["parameter"].map(PARAMETER_LABELS).fillna(focus["parameter"])
     focus = (
         focus.sort_values(["behavior_label", "pearson_r"])
         .groupby("behavior_label", sort=False)
-        .head(5)
+        .head(len(PARAMETER_ORDER))
         .copy()
     )
 
@@ -86,7 +109,7 @@ def main() -> None:
     for ax, behavior in zip(axes, behaviors):
         sub = focus.loc[focus["behavior_label"] == behavior].sort_values("pearson_r")
         colors = [color_pos if r >= 0 else color_neg for r in sub["pearson_r"]]
-        ax.barh(sub["parameter"], sub["pearson_r"], color=colors, alpha=0.9)
+        ax.barh(sub["parameter_label"], sub["pearson_r"], color=colors, alpha=0.9)
         ax.axvline(0, color="0.3", lw=1)
         ax.set_title(behavior)
         ax.set_xlabel("Pearson r")

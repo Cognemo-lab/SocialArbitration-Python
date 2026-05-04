@@ -20,6 +20,37 @@ from fit_raw_recovery_pipeline import (
 )
 
 
+def _icc3_1(two_col: np.ndarray) -> float:
+    x = np.asarray(two_col, dtype=float)
+    x = x[np.isfinite(x).all(axis=1)]
+    n, k = x.shape
+    if n < 3 or k != 2:
+        return np.nan
+    grand = np.mean(x)
+    mean_row = np.mean(x, axis=1, keepdims=True)
+    mean_col = np.mean(x, axis=0, keepdims=True)
+    ss_row = k * np.sum((mean_row - grand) ** 2)
+    ss_col = n * np.sum((mean_col - grand) ** 2)
+    ss_tot = np.sum((x - grand) ** 2)
+    ss_err = ss_tot - ss_row - ss_col
+    ms_row = ss_row / (n - 1)
+    ms_err = ss_err / ((n - 1) * (k - 1))
+    denom = ms_row + (k - 1) * ms_err
+    if denom == 0:
+        return np.nan
+    return float((ms_row - ms_err) / denom)
+
+
+def _metric_scale(parameter: str, x: np.ndarray, y: np.ndarray):
+    if parameter == 'ze':
+        mask = (x > 0) & (y > 0) & np.isfinite(x) & np.isfinite(y)
+        x = np.log(x[mask])
+        y = np.log(y[mask])
+        return x, y, 'log'
+    mask = np.isfinite(x) & np.isfinite(y)
+    return x[mask], y[mask], 'native'
+
+
 def _load_fit_json(path: str) -> dict:
     with open(path, 'r') as f:
         return json.load(f)
@@ -161,16 +192,19 @@ def main():
 
     pearsons = []
     for (group, parameter), d in correspondence_df.groupby(['group', 'parameter']):
-        x = d['fitted_on_raw'].to_numpy(dtype=float)
-        y = d['recovered_from_sim'].to_numpy(dtype=float)
+        x_raw = d['fitted_on_raw'].to_numpy(dtype=float)
+        y_raw = d['recovered_from_sim'].to_numpy(dtype=float)
+        x, y, metric_scale = _metric_scale(parameter, x_raw, y_raw)
         pearsons.append({
             'group': group,
             'parameter': parameter,
             'is_fixed': False,
-            'n': int(len(d)),
+            'n': int(len(x)),
+            'metric_scale': metric_scale,
             'mean_generating': float(np.mean(x)),
             'mean_recovered': float(np.mean(y)),
             'pearson_r': _corr(x, y),
+            'icc3_1': _icc3_1(np.column_stack([x, y])),
             'rmse': _rmse(x, y),
             'mae': float(np.mean(np.abs(y - x))),
             'mean_abs_error': float(np.mean(np.abs(y - x))),

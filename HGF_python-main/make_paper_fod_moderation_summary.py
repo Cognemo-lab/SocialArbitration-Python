@@ -10,12 +10,14 @@ import pandas as pd
 BASE = Path("/Users/drea/Documents/CAMH/Projects/McGill-Collaboration")
 STATE_DIR = BASE / "hitop" / "reliable_state_fod_moderation"
 PARAM_DIR = BASE / "hitop" / "parameter_fod_moderation"
+PCA_DIR = BASE / "hitop" / "pca_fod_moderation"
 OUT_DIR = BASE / "hitop" / "paper_fod_moderation_summary"
 
 LABELS = {
     "om_a": "Advice volatility (om_a)",
     "inferv_a_mean": "Advice inferential variance",
     "abs_eps2_a_mean": "Absolute advice epsilon2",
+    "pc1_composite": "Shared advice-uncertainty PC1",
 }
 
 SCOPE_LABELS = {
@@ -33,6 +35,8 @@ def main() -> None:
     state_slopes = pd.read_csv(STATE_DIR / "moderation_simple_slopes_all_scopes.csv")
     param_summary = pd.read_csv(PARAM_DIR / "moderation_summary_all_scopes.csv")
     param_slopes = pd.read_csv(PARAM_DIR / "moderation_simple_slopes_all_scopes.csv")
+    pca_summary = pd.read_csv(PCA_DIR / "pca_moderation_summary.csv")
+    pca_slopes = pd.read_csv(PCA_DIR / "pca_simple_slopes.csv")
 
     state_summary = state_summary.loc[
         state_summary["state_metric"].isin(["inferv_a_mean", "abs_eps2_a_mean"])
@@ -52,8 +56,14 @@ def main() -> None:
         columns={"parameter": "predictor", "simple_slope_parameter": "simple_slope"}
     )
 
-    summary = pd.concat([param_summary, state_summary], ignore_index=True)
-    slopes = pd.concat([param_slopes, state_slopes], ignore_index=True)
+    pca_summary = pca_summary.copy()
+    pca_summary["predictor"] = "pc1_composite"
+    pca_slopes = pca_slopes.copy()
+    pca_slopes["predictor"] = "pc1_composite"
+    pca_slopes = pca_slopes.rename(columns={"simple_slope_pc1": "simple_slope"})
+
+    summary = pd.concat([param_summary, state_summary, pca_summary], ignore_index=True)
+    slopes = pd.concat([param_slopes, state_slopes, pca_slopes], ignore_index=True)
     summary["predictor_label"] = summary["predictor"].map(LABELS)
     summary["scope_label"] = summary["analysis_scope"].map(SCOPE_LABELS)
     slopes["predictor_label"] = slopes["predictor"].map(LABELS)
@@ -90,7 +100,7 @@ def main() -> None:
     slopes.to_csv(OUT_DIR / "table_fod_moderation_simple_slopes.csv", index=False)
 
     order = ["pooled_clustered", "subject_mean", "t1", "t2"]
-    predictors = ["om_a", "inferv_a_mean", "abs_eps2_a_mean"]
+    predictors = ["om_a", "inferv_a_mean", "abs_eps2_a_mean", "pc1_composite"]
 
     heat = (
         summary.pivot(index="predictor_label", columns="scope_label", values="interaction_beta")
@@ -101,7 +111,7 @@ def main() -> None:
         .reindex(index=heat.index, columns=heat.columns)
     )
 
-    fig, axes = plt.subplots(2, 2, figsize=(12.5, 9.5))
+    fig, axes = plt.subplots(2, 2, figsize=(12.5, 10.2))
     ax = axes[0, 0]
     im = ax.imshow(heat.to_numpy(), cmap="RdBu_r", vmin=-0.28, vmax=0.28, aspect="auto")
     ax.set_xticks(np.arange(len(heat.columns)))

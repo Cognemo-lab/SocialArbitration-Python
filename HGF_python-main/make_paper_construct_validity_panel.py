@@ -27,6 +27,19 @@ STATE_LABELS = {
     "wager_pred_mean": "Predicted wager mean",
 }
 
+PARAMETER_ORDER = ["ka_a", "ka_r", "m_a", "om_a", "sa3a_0", "sa3r_0", "th_a", "th_r"]
+
+PARAMETER_LABELS = {
+    "ka_a": "Kappa-Advice",
+    "ka_r": "Kappa-Reward",
+    "m_a": "Equilibrium-Advice",
+    "om_a": "Omega-Advice",
+    "sa3a_0": "Prior Uncertainty-Advice",
+    "sa3r_0": "Prior Uncertainty-Reward",
+    "th_a": "Theta-Advice",
+    "th_r": "Theta-Reward",
+}
+
 
 def fdr_stars(q: float) -> str:
     if pd.isna(q):
@@ -113,10 +126,15 @@ def main() -> None:
 
     param = pd.read_csv(PARAM_DIR / "construct_validity_parameter_behavior.csv")
     state = pd.read_csv(STATE_DIR / "construct_validity_state_behavior.csv")
+    param = param.loc[param["parameter"].isin(PARAMETER_ORDER)].copy()
 
-    param_top = prepare_top_hits(param, "parameter")
+    param_top = prepare_top_hits(param, "parameter", PARAMETER_LABELS)
     state_top = prepare_top_hits(state, "state_metric", STATE_LABELS)
-    param_heat, param_q = prepare_heat(param, "parameter")
+    param_heat, param_q = prepare_heat(param, "parameter", PARAMETER_LABELS)
+    desired_param_index = [PARAMETER_LABELS[p] for p in PARAMETER_ORDER if PARAMETER_LABELS[p] in param_heat.index]
+    param_heat = param_heat.reindex(desired_param_index)
+    param_heat = param_heat.loc[param_heat.abs().max(axis=1).sort_values(ascending=False).index]
+    param_q = param_q.reindex(index=param_heat.index, columns=param_heat.columns)
     state_heat, state_q = prepare_heat(state, "state_metric", STATE_LABELS)
 
     fig = plt.figure(figsize=(16, 12))
