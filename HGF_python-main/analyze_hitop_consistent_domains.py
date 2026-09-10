@@ -24,6 +24,8 @@ OUTCOMES = [
     "hitop_reality_distortion_hallucinations",
 ]
 
+EXCLUDED_PREDICTORS = {"abs_eps3_a_mean"}
+
 
 def zscore_frame(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     out = df.copy()
@@ -70,6 +72,7 @@ def select_predictors(assoc: pd.DataFrame, outcome: str, scope: str) -> list[str
         & (assoc["analysis_scope"] == scope)
         & (assoc["fdr_q_pearson_within_scope"] < 0.05)
     ].copy()
+    sub = sub[~sub["quantity_name"].isin(EXCLUDED_PREDICTORS)].copy()
     if sub.empty:
         return []
     sub["abs_r"] = sub["pearson_r"].abs()
